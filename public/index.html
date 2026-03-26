@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SQLite Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0f0f0f;
+      --surface: #1a1a1a;
+      --surface2: #222;
+      --border: #2e2e2e;
+      --accent: #00e5a0;
+      --accent-dim: rgba(0, 229, 160, 0.12);
+      --red: #ff4d4d;
+      --red-dim: rgba(255, 77, 77, 0.1);
+      --text: #e8e8e8;
+      --text-muted: #666;
+      --text-mid: #999;
+      --radius: 6px;
+      --mono: "IBM Plex Mono", monospace;
+      --sans: "IBM Plex Sans", sans-serif;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      min-height: 100vh;
+      padding: 0;
+    }
+
+    /* HEADER */
+    header {
+      border-bottom: 1px solid var(--border);
+      padding: 18px 32px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    header .dot {
+      width: 8px; height: 8px;
+      background: var(--accent);
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+    header h1 {
+      font-family: var(--mono);
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text-mid);
+      letter-spacing: 0.05em;
+    }
+    header h1 span { color: var(--accent); }
+
+    /* TABS */
+    .tabs {
+      display: flex;
+      border-bottom: 1px solid var(--border);
+      padding: 0 32px;
+    }
+    .tab-btn {
+      font-family: var(--mono);
+      font-size: 12px;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      background: none;
+      border: none;
+      border-bottom: 2px solid transparent;
+      padding: 14px 20px;
+      cursor: pointer;
+      transition: color 0.2s, border-color 0.2s;
+    }
+    .tab-btn:hover { color: var(--text-mid); }
+    .tab-btn.active {
+      color: var(--accent);
+      border-bottom-color: var(--accent);
+    }
+
+    /* MAIN LAYOUT */
+    main {
+      display: grid;
+      grid-template-columns: 340px 1fr;
+      gap: 0;
+      min-height: calc(100vh - 110px);
+    }
+
+    /* PANEL ESQUERDO (forms) */
+    .panel-left {
+      border-right: 1px solid var(--border);
+      padding: 28px 24px;
+    }
+
+    .panel-title {
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--text-muted);
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      margin-bottom: 20px;
+    }
+
+    /* FORM */
+    .form-group {
+      margin-bottom: 14px;
+    }
+    label {
+      display: block;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--text-muted);
+      letter-spacing: 0.05em;
+      margin-bottom: 6px;
+    }
+    input, select {
+      width: 100%;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 13px;
+      padding: 10px 12px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    input:focus, select:focus {
+      border-color: var(--accent);
+    }
+    input::placeholder { color: var(--text-muted); }
+    select option { background: var(--surface2); }
+
+    .btn {
+      width: 100%;
+      padding: 11px;
+      border: none;
+      border-radius: var(--radius);
+      font-family: var(--mono);
+      font-size: 12px;
+      letter-spacing: 0.05em;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.1s;
+      margin-top: 4px;
+    }
+    .btn:active { transform: scale(0.98); }
+    .btn-primary {
+      background: var(--accent);
+      color: #000;
+      font-weight: 500;
+    }
+    .btn-primary:hover { opacity: 0.85; }
+    .btn-secondary {
+      background: var(--surface2);
+      color: var(--text-mid);
+      border: 1px solid var(--border);
+      margin-top: 8px;
+    }
+    .btn-secondary:hover { border-color: var(--text-muted); color: var(--text); }
+
+    /* TOAST */
+    #toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(80px);
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 10px 18px;
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--text);
+      transition: transform 0.3s ease;
+      z-index: 100;
+      white-space: nowrap;
+    }
+    #toast.show { transform: translateX(-50%) translateY(0); }
+    #toast.success { border-color: var(--accent); color: var(--accent); }
+    #toast.error { border-color: var(--red); color: var(--red); }
+
+    /* PANEL DIREITO (tabelas) */
+    .panel-right {
+      padding: 28px 32px;
+      overflow-x: auto;
+    }
+
+    .section { display: none; }
+    .section.active { display: block; }
+
+    /* STATS */
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-bottom: 28px;
+    }
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px 18px;
+    }
+    .stat-label {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--text-muted);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+    .stat-value {
+      font-family: var(--mono);
+      font-size: 22px;
+      font-weight: 500;
+      color: var(--accent);
+    }
+
+    /* TABLE */
+    .table-wrap {
+      overflow-x: auto;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    thead th {
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 500;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      text-align: left;
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border);
+    }
+    tbody tr {
+      border-bottom: 1px solid var(--border);
+      transition: background 0.15s;
+    }
+    tbody tr:hover { background: var(--surface); }
+    tbody td {
+      padding: 11px 14px;
+      color: var(--text-mid);
+      font-family: var(--mono);
+      font-size: 12px;
+    }
+    tbody td:first-child { color: var(--text); }
+
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 3px;
+      font-size: 11px;
+      font-family: var(--mono);
+    }
+    .badge-green { background: var(--accent-dim); color: var(--accent); }
+
+    .btn-delete {
+      background: none;
+      border: 1px solid transparent;
+      color: var(--text-muted);
+      font-family: var(--mono);
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-delete:hover {
+      border-color: var(--red);
+      color: var(--red);
+      background: var(--red-dim);
+    }
+
+    .empty {
+      padding: 48px 0;
+      text-align: center;
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    /* DIVIDER */
+    .divider {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 24px 0;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="dot"></div>
+  <h1>sqlite<span>://</span>dashboard</h1>
+</header>
+
+<div class="tabs">
+  <button class="tab-btn active" onclick="switchTab('users')">users</button>
+  <button class="tab-btn" onclick="switchTab('orders')">orders</button>
+  <button class="tab-btn" onclick="switchTab('join')">orders + join</button>
+</div>
+
+<main>
+  <!-- PANEL ESQUERDO -->
+  <aside class="panel-left">
+
+    <!-- FORM USERS -->
+    <div id="form-users">
+      <p class="panel-title">→ novo usuário</p>
+      <div class="form-group">
+        <label>name</label>
+        <input id="u-name" type="text" placeholder="ex: Gui" />
+      </div>
+      <div class="form-group">
+        <label>email</label>
+        <input id="u-email" type="email" placeholder="ex: gui@email.com" />
+      </div>
+      <button class="btn btn-primary" onclick="createUser()">INSERT user</button>
+      <button class="btn btn-secondary" onclick="loadUsers()">SELECT * users</button>
+    </div>
+
+    <!-- FORM ORDERS -->
+    <div id="form-orders" style="display:none">
+      <p class="panel-title">→ novo pedido</p>
+      <div class="form-group">
+        <label>user_id</label>
+        <select id="o-user">
+          <option value="">selecione um usuário</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>product</label>
+        <input id="o-product" type="text" placeholder="ex: Notebook" />
+      </div>
+      <div class="form-group">
+        <label>total (R$)</label>
+        <input id="o-total" type="number" placeholder="ex: 3500" min="0" step="0.01" />
+      </div>
+      <button class="btn btn-primary" onclick="createOrder()">INSERT order</button>
+      <button class="btn btn-secondary" onclick="loadOrders()">SELECT * orders</button>
+    </div>
+
+    <!-- FORM JOIN -->
+    <div id="form-join" style="display:none">
+      <p class="panel-title">→ query</p>
+      <div style="background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:14px; font-family:var(--mono); font-size:11px; color:var(--text-mid); line-height:1.8;">
+        SELECT<br>
+        &nbsp;&nbsp;users.name,<br>
+        &nbsp;&nbsp;orders.product,<br>
+        &nbsp;&nbsp;orders.total<br>
+        FROM orders<br>
+        JOIN users<br>
+        &nbsp;&nbsp;ON users.id = orders.user_id<br>
+        ORDER BY orders.created_at DESC
+      </div>
+      <button class="btn btn-primary" onclick="loadJoin()" style="margin-top:16px;">RUN query</button>
+    </div>
+
+  </aside>
+
+  <!-- PANEL DIREITO -->
+  <div class="panel-right">
+
+    <!-- SECTION USERS -->
+    <div id="section-users" class="section active">
+      <div class="stats">
+        <div class="stat-card">
+          <div class="stat-label">total users</div>
+          <div class="stat-value" id="stat-users">—</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">tabela</div>
+          <div class="stat-value" style="font-size:14px; padding-top:4px; color:var(--text-mid)">users</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">status</div>
+          <div class="stat-value" style="font-size:14px; padding-top:4px;">
+            <span class="badge badge-green">online</span>
+          </div>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>id</th><th>name</th><th>email</th><th>created_at</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="tbody-users">
+            <tr><td colspan="5" class="empty">rode SELECT * users →</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- SECTION ORDERS -->
+    <div id="section-orders" class="section">
+      <div class="stats">
+        <div class="stat-card">
+          <div class="stat-label">total orders</div>
+          <div class="stat-value" id="stat-orders">—</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">total (R$)</div>
+          <div class="stat-value" id="stat-total">—</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">tabela</div>
+          <div class="stat-value" style="font-size:14px; padding-top:4px; color:var(--text-mid)">orders</div>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>id</th><th>user_id</th><th>product</th><th>total</th><th>created_at</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="tbody-orders">
+            <tr><td colspan="6" class="empty">rode SELECT * orders →</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- SECTION JOIN -->
+    <div id="section-join" class="section">
+      <div class="stats">
+        <div class="stat-card">
+          <div class="stat-label">resultado</div>
+          <div class="stat-value" id="stat-join">—</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">tipo</div>
+          <div class="stat-value" style="font-size:14px; padding-top:4px; color:var(--text-mid)">INNER JOIN</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">tabelas</div>
+          <div class="stat-value" style="font-size:14px; padding-top:4px; color:var(--text-mid)">2</div>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>user_name</th><th>user_email</th><th>product</th><th>total</th><th>created_at</th>
+            </tr>
+          </thead>
+          <tbody id="tbody-join">
+            <tr><td colspan="5" class="empty">rode a query →</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+</main>
+
+<div id="toast"></div>
+
+<script>
+  const BASE = "http://localhost:3000";
+
+  // ─── TABS ──────────────────────────────────────────────────────────
+  function switchTab(tab) {
+    document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+    document.querySelectorAll(".section").forEach(s => s.classList.remove("active"));
+    document.querySelectorAll("[id^='form-']").forEach(f => f.style.display = "none");
+
+    event.target.classList.add("active");
+    document.getElementById("section-" + tab).classList.add("active");
+    document.getElementById("form-" + tab).style.display = "block";
+
+    if (tab === "orders") populateUserSelect();
+  }
+
+  // ─── TOAST ─────────────────────────────────────────────────────────
+  function toast(msg, type = "success") {
+    const t = document.getElementById("toast");
+    t.textContent = msg;
+    t.className = "show " + type;
+    setTimeout(() => t.className = "", 2500);
+  }
+
+  // ─── USERS ─────────────────────────────────────────────────────────
+  async function createUser() {
+    const name  = document.getElementById("u-name").value.trim();
+    const email = document.getElementById("u-email").value.trim();
+    if (!name || !email) return toast("preencha name e email", "error");
+
+    const res = await fetch(`${BASE}/users`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, email })
+    });
+    const data = await res.json();
+
+    if (!res.ok) return toast(data.error, "error");
+
+    toast("✓ " + data.message);
+    document.getElementById("u-name").value  = "";
+    document.getElementById("u-email").value = "";
+    loadUsers();
+  }
+
+  async function loadUsers() {
+    const res  = await fetch(`${BASE}/users`);
+    const data = await res.json();
+    const tbody = document.getElementById("tbody-users");
+
+    document.getElementById("stat-users").textContent = data.length;
+
+    if (!data.length) {
+      tbody.innerHTML = `<tr><td colspan="5" class="empty">nenhum usuário cadastrado</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = data.map(u => `
+      <tr>
+        <td>${u.id}</td>
+        <td>${u.name}</td>
+        <td>${u.email}</td>
+        <td>${fmt(u.created_at)}</td>
+        <td><button class="btn-delete" onclick="deleteUser(${u.id})">delete</button></td>
+      </tr>
+    `).join("");
+  }
+
+  async function deleteUser(id) {
+    const res = await fetch(`${BASE}/users/${id}`, { method: "DELETE" });
+    const data = await res.json();
+    if (!res.ok) return toast(data.error, "error");
+    toast("✓ " + data.message);
+    loadUsers();
+  }
+
+  // ─── ORDERS ────────────────────────────────────────────────────────
+  async function populateUserSelect() {
+    const res  = await fetch(`${BASE}/users`);
+    const data = await res.json();
+    const sel  = document.getElementById("o-user");
+    sel.innerHTML = `<option value="">selecione um usuário</option>` +
+      data.map(u => `<option value="${u.id}">${u.id} — ${u.name}</option>`).join("");
+  }
+
+  async function createOrder() {
+    const user_id = document.getElementById("o-user").value;
+    const product = document.getElementById("o-product").value.trim();
+    const total   = parseFloat(document.getElementById("o-total").value);
+
+    if (!user_id || !product || isNaN(total)) return toast("preencha todos os campos", "error");
+
+    const res = await fetch(`${BASE}/orders`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user_id: parseInt(user_id), product, total })
+    });
+    const data = await res.json();
+
+    if (!res.ok) return toast(data.error, "error");
+
+    toast("✓ " + data.message);
+    document.getElementById("o-product").value = "";
+    document.getElementById("o-total").value   = "";
+    loadOrders();
+  }
+
+  async function loadOrders() {
+    const res  = await fetch(`${BASE}/orders`);
+    const data = await res.json();
+    const tbody = document.getElementById("tbody-orders");
+
+    const totalSum = data.reduce((s, o) => s + o.total, 0);
+    document.getElementById("stat-orders").textContent = data.length;
+    document.getElementById("stat-total").textContent  = "R$" + totalSum.toFixed(0);
+
+    if (!data.length) {
+      tbody.innerHTML = `<tr><td colspan="6" class="empty">nenhum pedido cadastrado</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = data.map(o => `
+      <tr>
+        <td>${o.id}</td>
+        <td>${o.user_id}</td>
+        <td>${o.product}</td>
+        <td>R$ ${o.total.toFixed(2)}</td>
+        <td>${fmt(o.created_at)}</td>
+        <td><button class="btn-delete" onclick="deleteOrder(${o.id})">delete</button></td>
+      </tr>
+    `).join("");
+  }
+
+  async function deleteOrder(id) {
+    const res = await fetch(`${BASE}/orders/${id}`, { method: "DELETE" });
+    const data = await res.json();
+    if (!res.ok) return toast(data.error, "error");
+    toast("✓ " + data.message);
+    loadOrders();
+  }
+
+  // ─── JOIN ──────────────────────────────────────────────────────────
+  async function loadJoin() {
+    const res  = await fetch(`${BASE}/orders`);
+    const data = await res.json();
+    const tbody = document.getElementById("tbody-join");
+
+    document.getElementById("stat-join").textContent = data.length + " rows";
+
+    if (!data.length) {
+      tbody.innerHTML = `<tr><td colspan="5" class="empty">sem dados para o JOIN</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = data.map(o => `
+      <tr>
+        <td>${o.user_name}</td>
+        <td>${o.user_email}</td>
+        <td>${o.product}</td>
+        <td>R$ ${o.total.toFixed(2)}</td>
+        <td>${fmt(o.created_at)}</td>
+      </tr>
+    `).join("");
+  }
+
+  // ─── UTIL ──────────────────────────────────────────────────────────
+  function fmt(dt) {
+    if (!dt) return "—";
+    return new Date(dt).toLocaleString("pt-BR", {
+      day: "2-digit", month: "2-digit", year: "numeric",
+      hour: "2-digit", minute: "2-digit"
+    });
+  }
+</script>
+</body>
+</html>
